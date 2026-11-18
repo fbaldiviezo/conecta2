@@ -1,0 +1,6 @@
+**/bin/
+**/datos/
+**/*.jar
+tmp/
+.tools/
+__pycache__/
