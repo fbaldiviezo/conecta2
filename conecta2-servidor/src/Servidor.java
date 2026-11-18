@@ -50,12 +50,34 @@ public class Servidor {
     }
 
     public synchronized void enviarMensaje(ServerThread emisor, String destino, String texto) throws IOException {
-        Mensaje mensaje = datos.guardar(emisor.getUsuario(), ArchivoDatos.normalizarUsuario(destino), texto);
-        // Un fallo al notificar no revierte un mensaje que ya está guardado.
-        notificar(emisor, mensaje.aProtocolo());
-        ServerThread receptor = buscar(mensaje.getDestinatario());
-        if (receptor != null)
-            notificar(receptor, mensaje.aProtocolo());
+        ArchivoDatos.validarTexto(texto);
+        ArrayList<String> destinatarios = new ArrayList<>();
+        if (destino.isEmpty()) {
+            for (ServerThread cliente : threadList) {
+                if (cliente != emisor) destinatarios.add(cliente.getUsuario());
+            }
+        } else {
+            destinatarios.add(ArchivoDatos.normalizarUsuario(destino));
+        }
+        if (destinatarios.isEmpty()) throw new IllegalArgumentException("No hay otros clientes conectados.");
+        for (String destinatario : destinatarios) {
+            Mensaje mensaje = datos.guardar(emisor.getUsuario(), destinatario, texto);
+            // Cada copia se confirma después de guardarla, también en un envío a todos.
+            notificar(emisor, mensaje.aProtocolo());
+            ServerThread receptor = buscar(destinatario);
+            if (receptor != null) notificar(receptor, mensaje.aProtocolo());
+        }
+        emisor.enviar("ENVIADO");
+    }
+
+    public synchronized void seleccionarChat(ServerThread cliente, String contacto) {
+        if (!contacto.isEmpty()) {
+            contacto = ArchivoDatos.normalizarUsuario(contacto);
+            if (!datos.existe(contacto) || contacto.equals(cliente.getUsuario())) {
+                throw new IllegalArgumentException("Selecciona otro usuario registrado.");
+            }
+        }
+        cliente.setContacto(contacto);
     }
 
     public synchronized void leer(ServerThread lector, long id) throws IOException {
@@ -69,6 +91,16 @@ public class Servidor {
     public synchronized void desconectar(ServerThread cliente) {
         if (threadList.remove(cliente)) {
             System.out.println("Desconectado: " + cliente.getUsuario());
+            ServerThread receptor = buscar(cliente.getContacto());
+            if (receptor != null) {
+                try {
+                    Mensaje aviso = datos.guardar(cliente.getUsuario(), receptor.getUsuario(),
+                            cliente.getUsuario() + " salió del chat.");
+                    notificar(receptor, aviso.aProtocolo());
+                } catch (IOException e) {
+                    System.err.println("No se pudo guardar el aviso de salida: " + e.getMessage());
+                }
+            }
             publicarUsuarios();
         }
     }

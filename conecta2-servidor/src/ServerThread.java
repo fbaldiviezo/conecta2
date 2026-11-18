@@ -8,6 +8,7 @@ public class ServerThread extends Thread {
     private BufferedReader entrada;
     private BufferedWriter salida;
     private String usuario;
+    private String contacto = "";
 
     public ServerThread(Socket socket, Servidor servidor) {
         this.socket = socket;
@@ -22,6 +23,9 @@ public class ServerThread extends Thread {
     public void setUsuario(String usuario) {
         this.usuario = usuario;
     }
+
+    public String getContacto() { return contacto; }
+    public void setContacto(String contacto) { this.contacto = contacto; }
 
     @Override
     public void run() {
@@ -41,7 +45,7 @@ public class ServerThread extends Thread {
             socket.setSoTimeout(0);
             String linea;
             while ((linea = leerLinea()) != null) {
-                if (linea.equals("SALIR"))
+                if (linea.equals("SALIR") || linea.equalsIgnoreCase("bye"))
                     break;
                 try {
                     // El último campo conserva las tabulaciones del texto.
@@ -50,6 +54,8 @@ public class ServerThread extends Thread {
                         servidor.enviarMensaje(this, campos[1], Mensaje.restaurarSaltos(campos[2]));
                     } else if (campos.length == 2 && campos[0].equals("LEER")) {
                         servidor.leer(this, Long.parseLong(campos[1]));
+                    } else if (campos.length == 2 && campos[0].equals("ABRIR")) {
+                        servidor.seleccionarChat(this, campos[1]);
                     } else {
                         throw new IllegalArgumentException("Orden desconocida o cantidad de campos inválida.");
                     }

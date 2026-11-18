@@ -9,8 +9,10 @@ public class Cliente {
                     UIManager.put(clave, new javax.swing.plaf.FontUIResource("Segoe UI", Font.PLAIN, 14));
                 }
             }
-            new VentanaConexion(args.length > 0 ? args[0] : "localhost",
-                    args.length > 1 ? args[1] : "3333").setVisible(true);
+            String host = args.length > 1 ? args[0] : "localhost";
+            String puerto = args.length > 1 ? args[1] : "3333";
+            String alias = args.length == 1 ? args[0] : args.length > 2 ? args[2] : "";
+            new VentanaConexion(host, puerto, alias).setVisible(true);
         });
     }
 }

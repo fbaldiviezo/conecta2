@@ -14,7 +14,12 @@ public class VentanaConexion extends JFrame {
     private String errorAcceso;
 
     public VentanaConexion(String direccion, String numeroPuerto) {
+        this(direccion, numeroPuerto, "");
+    }
+
+    public VentanaConexion(String direccion, String numeroPuerto, String nombre) {
         super("Conecta2");
+        alias.setText(nombre);
         host = new JTextField(direccion);
         puerto = new JTextField(numeroPuerto);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -57,6 +62,7 @@ public class VentanaConexion extends JFrame {
                     conexion.cerrar();
             }
         });
+        if (!nombre.isBlank()) SwingUtilities.invokeLater(this::conectar);
     }
 
     private void agregar(JPanel panel, JComponent componente) {

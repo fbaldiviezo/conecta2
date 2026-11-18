@@ -61,6 +61,7 @@ public class ClientThread extends Thread {
             envios.execute(() -> {
                 try {
                     escribir(linea);
+                    if (linea.equals("SALIR")) cerrar();
                 } catch (IOException e) {
                     motivo = "Falló el envío. Revisa el historial antes de reenviar.";
                     cerrar();
@@ -82,5 +83,10 @@ public class ClientThread extends Thread {
         activo = false;
         envios.shutdownNow();
         try { socket.close(); } catch (IOException ignored) { }
+    }
+
+    public void salir() {
+        // La cola envía primero la selección de chat y después la salida.
+        if (!enviar("SALIR")) cerrar();
     }
 }

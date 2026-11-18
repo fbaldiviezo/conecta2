@@ -30,6 +30,7 @@ public class VentanaChatRed extends JFrame {
     private JTextField txtMensaje;
     private JButton btnEnviar;
     private JButton btnSalir;
+    private JButton btnTodos;
     private JLabel lblEstado;
     private boolean cargando = true;
     private boolean conectado = true;
@@ -66,6 +67,11 @@ public class VentanaChatRed extends JFrame {
         JLabel lblClienteEmisor = crearTitulo(usuario);
         lblClienteEmisor.setToolTipText("Cliente emisor de mensaje");
         headerIzquierdo.add(lblClienteEmisor, BorderLayout.CENTER);
+        btnTodos = new JButton("Todos");
+        btnTodos.setBackground(WA_HEADER_BG);
+        btnTodos.setForeground(Color.WHITE);
+        btnTodos.setFocusPainted(false);
+        headerIzquierdo.add(btnTodos, BorderLayout.EAST);
 
         modeloClientes = new DefaultListModel<>();
         listaClientes = new JList<>(modeloClientes);
@@ -99,7 +105,7 @@ public class VentanaChatRed extends JFrame {
 
         JPanel panelDerecho = new JPanel(new BorderLayout());
         JPanel headerDerecho = crearCabecera();
-        lblClienteActivo = crearTitulo("Cliente activo del Chat");
+        lblClienteActivo = crearTitulo("Todos");
         headerDerecho.add(lblClienteActivo, BorderLayout.CENTER);
         btnSalir = new JButton("Salir");
         btnSalir.setFocusPainted(false);
@@ -181,8 +187,11 @@ public class VentanaChatRed extends JFrame {
         btnEnviar.addActionListener(e -> enviarMensaje());
         txtMensaje.addActionListener(e -> enviarMensaje());
         btnSalir.addActionListener(e -> volverAlAcceso());
+        btnTodos.addActionListener(e -> listaClientes.clearSelection());
         listaClientes.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
+                String contacto = listaClientes.getSelectedValue();
+                conexion.enviar("ABRIR\t" + (contacto == null ? "" : contacto));
                 actualizarTitulo();
                 mostrarHistorial();
                 actualizarEntrada();
@@ -195,7 +204,7 @@ public class VentanaChatRed extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override public void windowClosing(WindowEvent e) {
                 cerrando = true;
-                conexion.cerrar();
+                conexion.salir();
             }
         });
     }
@@ -212,12 +221,8 @@ public class VentanaChatRed extends JFrame {
                     Mensaje mensaje = new Mensaje(linea.split("\t", 7));
                     if (buscarMensaje(mensaje.getId()) != null) break;
                     mensajes.add(mensaje);
-                    // Solo hay un envío pendiente y una sesión por alias.
-                    if (enviando && mensaje.getEmisor().equals(usuario)) {
-                        enviando = false;
-                        txtMensaje.setText("");
-                        lblEstado.setText("Mensaje guardado");
-                        actualizarEntrada();
+                    if (mensaje.getDestinatario().equals(usuario) && !modeloClientes.contains(mensaje.getEmisor())) {
+                        modeloClientes.addElement(mensaje.getEmisor());
                     }
                     if (!cargando) {
                         listaClientes.repaint();
@@ -225,10 +230,16 @@ public class VentanaChatRed extends JFrame {
                         marcarLecturas();
                     }
                     break;
+                case "ENVIADO":
+                    enviando = false;
+                    txtMensaje.setText("");
+                    lblEstado.setText("Mensaje guardado");
+                    actualizarEntrada();
+                    break;
                 case "LISTO":
                     cargando = false;
                     listaClientes.repaint();
-                    lblEstado.setText("Conectado · Selecciona un cliente para conversar");
+                    lblEstado.setText("Conectado · Sin seleccionar un cliente envías a todos");
                     actualizarEntrada();
                     mostrarHistorial();
                     marcarLecturas();
@@ -262,7 +273,6 @@ public class VentanaChatRed extends JFrame {
         conectados.clear();
         for (int i = 1; i + 1 < campos.length; i += 2) {
             String nombre = campos[i];
-            if (!nombre.equals(usuario) && !modeloClientes.contains(nombre)) modeloClientes.addElement(nombre);
             if (Boolean.parseBoolean(campos[i + 1])) conectados.add(nombre);
         }
         listaClientes.repaint();
@@ -287,8 +297,12 @@ public class VentanaChatRed extends JFrame {
 
     private void enviarMensaje() {
         String destino = listaClientes.getSelectedValue();
-        if (!conectado || cargando || destino == null || enviando) return;
+        if (!conectado || cargando || enviando) return;
         String texto = txtMensaje.getText();
+        if (texto.strip().equalsIgnoreCase("bye")) {
+            volverAlAcceso();
+            return;
+        }
         if (texto.isBlank()) return;
         if (texto.length() > 4000 || texto.indexOf('\0') >= 0) {
             JOptionPane.showMessageDialog(this, "El mensaje admite hasta 4000 caracteres y no admite NUL.");
@@ -297,7 +311,7 @@ public class VentanaChatRed extends JFrame {
         enviando = true;
         lblEstado.setText("Enviando…");
         actualizarEntrada();
-        if (!conexion.enviar("ENVIAR\t" + destino + "\t" + Mensaje.enUnaLinea(texto))) {
+        if (!conexion.enviar("ENVIAR\t" + (destino == null ? "" : destino) + "\t" + Mensaje.enUnaLinea(texto))) {
             desconectado("No se pudo enviar el mensaje.");
         }
     }
@@ -315,25 +329,24 @@ public class VentanaChatRed extends JFrame {
 
     private void actualizarTitulo() {
         String contacto = listaClientes.getSelectedValue();
-        lblClienteActivo.setText(contacto == null ? "Cliente activo del Chat" : contacto);
-        lblClienteActivo.setToolTipText(contacto == null ? "Selecciona un cliente"
+        lblClienteActivo.setText(contacto == null ? "Todos" : contacto);
+        lblClienteActivo.setToolTipText(contacto == null ? "Enviar a todos los clientes conectados"
                 : conectados.contains(contacto) && conectado ? "En línea" : "Desconectado");
     }
 
     private void actualizarEntrada() {
-        boolean disponible = conectado && !cargando && listaClientes.getSelectedValue() != null && !enviando;
+        boolean disponible = conectado && !cargando && !enviando;
         txtMensaje.setEditable(disponible);
         btnEnviar.setEnabled(disponible);
         listaClientes.setEnabled(!enviando);
+        btnTodos.setEnabled(!enviando);
     }
 
     private void mostrarHistorial() {
         String contacto = listaClientes.getSelectedValue();
         StringBuilder historialHtml = new StringBuilder();
         historialHtml.append("<html><body style='font-family:Segoe UI; font-size:11pt; color:#111b21;'>");
-        if (contacto == null) {
-            historialHtml.append("<p style='color:#667781;'>Selecciona un cliente para ver sus mensajes.</p>");
-        } else {
+        if (contacto != null) {
             historialHtml.append("<table width='100%' cellspacing='8' cellpadding='0'>");
             for (Mensaje mensaje : mensajes) {
                 if (!mensaje.contactoDe(usuario).equals(contacto)) continue;
@@ -372,7 +385,7 @@ public class VentanaChatRed extends JFrame {
 
     private void volverAlAcceso() {
         cerrando = true;
-        conexion.cerrar();
+        conexion.salir();
         dispose();
         new VentanaConexion(host, puerto).setVisible(true);
     }
