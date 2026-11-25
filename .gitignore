@@ -4,4 +4,3 @@
 tmp/
 .tools/
 __pycache__/
-*.ps1
