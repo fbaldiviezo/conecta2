@@ -29,7 +29,6 @@ public class ClientThread extends Thread {
         this.alRecibir = alRecibir;
         this.alDesconectar = alDesconectar;
         setName("recepcion-cliente");
-        setDaemon(true);
     }
 
     @Override

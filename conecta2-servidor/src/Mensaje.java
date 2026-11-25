@@ -43,12 +43,11 @@ public class Mensaje {
     }
 
     public String aArchivo() {
-        return id + "\t" + fecha + "\t" + emisor + "\t" + destinatario + "\t" + enUnaLinea(texto);
+        return id + "\t" + fecha + "\t" + emisor + "\t" + destinatario + "\t" + leido + "\t" + enUnaLinea(texto);
     }
 
     public String aProtocolo() {
-        return "MENSAJE\t" + id + "\t" + fecha + "\t" + emisor + "\t" + destinatario
-                + "\t" + leido + "\t" + enUnaLinea(texto);
+        return "MENSAJE\t" + aArchivo();
     }
 
     // Solo se representan los saltos de línea para no cortar una orden del socket.

@@ -53,6 +53,9 @@ public class Servidor {
         ArchivoDatos.validarTexto(texto);
         ArrayList<String> destinatarios = new ArrayList<>();
         if (destino.isEmpty()) {
+            if (!emisor.getContacto().isEmpty()) {
+                throw new IllegalArgumentException("Después de elegir un contacto solo puedes enviar mensajes privados.");
+            }
             for (ServerThread cliente : threadList) {
                 if (cliente != emisor) destinatarios.add(cliente.getUsuario());
             }
@@ -71,6 +74,9 @@ public class Servidor {
     }
 
     public synchronized void seleccionarChat(ServerThread cliente, String contacto) {
+        if (contacto.isEmpty() && !cliente.getContacto().isEmpty()) {
+            throw new IllegalArgumentException("No puedes volver al envío general en esta sesión.");
+        }
         if (!contacto.isEmpty()) {
             contacto = ArchivoDatos.normalizarUsuario(contacto);
             if (!datos.existe(contacto) || contacto.equals(cliente.getUsuario())) {

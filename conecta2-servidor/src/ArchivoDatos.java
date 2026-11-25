@@ -6,86 +6,70 @@ import java.util.*;
 
 // El servidor coordina el acceso a esta clase mediante sus métodos synchronized.
 public class ArchivoDatos {
-    private final Path directorio;
+    private final Path archivo;
     private final ArrayList<String> usuarios = new ArrayList<>();
     private final ArrayList<Mensaje> mensajes = new ArrayList<>();
     private long siguienteId = 1;
 
     public ArchivoDatos(Path directorio) throws IOException {
-        this.directorio = directorio.toAbsolutePath();
-        Files.createDirectories(this.directorio);
+        Files.createDirectories(directorio);
+        this.archivo = directorio.toAbsolutePath().resolve("datos.txt");
         cargar();
     }
 
     private void cargar() throws IOException {
+        if (!Files.exists(archivo)) Files.createFile(archivo);
         int numero = 0;
-        for (String linea : lineas("usuarios.txt")) {
-            numero++;
-            try {
-                String nombre = normalizarUsuario(linea);
-                if (!nombre.equals(linea) || existe(linea)) {
-                    throw new IllegalArgumentException("Alias repetido o sin normalizar");
-                }
-                usuarios.add(nombre);
-            } catch (RuntimeException e) {
-                throw invalido("usuarios.txt", numero, e);
-            }
-        }
-        numero = 0;
         long ultimo = 0;
-        for (String linea : lineas("mensajes.txt")) {
+        for (String linea : Files.readAllLines(archivo, StandardCharsets.UTF_8)) {
             numero++;
-            if (numero == 1 && linea.equals("# Conecta2 - mensajes en texto")) continue;
             try {
-                String[] p = linea.split("\t", 5);
-                if (p.length != 5)
-                    throw new IllegalArgumentException("Se esperaban 5 campos");
-                Mensaje mensaje = new Mensaje(Long.parseLong(p[0]), Long.parseLong(p[1]),
-                        p[2], p[3], Mensaje.restaurarSaltos(p[4]));
-                if (mensaje.getId() <= ultimo || mensaje.getId() == Long.MAX_VALUE
-                        || mensaje.getFecha() <= 0 || !existe(mensaje.getEmisor())
-                        || !existe(mensaje.getDestinatario())
-                        || mensaje.getEmisor().equals(mensaje.getDestinatario())) {
-                    throw new IllegalArgumentException("Identificador, fecha o usuarios inválidos");
+                String[] registro = linea.split("\t", 2);
+                if (registro.length != 2) throw new IllegalArgumentException("Registro incompleto");
+                if (registro[0].equals("USUARIO")) {
+                    String nombre = normalizarUsuario(registro[1]);
+                    if (!nombre.equals(registro[1]) || existe(nombre)) {
+                        throw new IllegalArgumentException("Alias repetido o sin normalizar");
+                    }
+                    usuarios.add(nombre);
+                } else if (registro[0].equals("MENSAJE")) {
+                    String[] p = registro[1].split("\t", 6);
+                    if (p.length != 6) throw new IllegalArgumentException("Se esperaban 6 campos de mensaje");
+                    if (!p[4].equals("true") && !p[4].equals("false")) {
+                        throw new IllegalArgumentException("El estado de lectura debe ser true o false");
+                    }
+                    Mensaje mensaje = new Mensaje(Long.parseLong(p[0]), Long.parseLong(p[1]),
+                            p[2], p[3], Mensaje.restaurarSaltos(p[5]));
+                    mensaje.setLeido(Boolean.parseBoolean(p[4]));
+                    if (mensaje.getId() <= ultimo || mensaje.getId() == Long.MAX_VALUE
+                            || mensaje.getFecha() <= 0 || !existe(mensaje.getEmisor())
+                            || !existe(mensaje.getDestinatario())
+                            || mensaje.getEmisor().equals(mensaje.getDestinatario())) {
+                        throw new IllegalArgumentException("Identificador, fecha o usuarios inválidos");
+                    }
+                    validarTexto(mensaje.getTexto());
+                    ultimo = mensaje.getId();
+                    mensajes.add(mensaje);
+                } else {
+                    throw new IllegalArgumentException("Tipo de registro desconocido");
                 }
-                validarTexto(mensaje.getTexto());
-                ultimo = mensaje.getId();
-                mensajes.add(mensaje);
             } catch (RuntimeException e) {
-                throw invalido("mensajes.txt", numero, e);
+                throw new IOException("datos.txt: línea " + numero + " inválida: " + e.getMessage(), e);
             }
         }
         siguienteId = ultimo + 1;
-        numero = 0;
-        for (String linea : lineas("lecturas.txt")) {
-            numero++;
-            try {
-                Mensaje mensaje = buscarMensaje(Long.parseLong(linea));
-                if (mensaje == null)
-                    throw new IllegalArgumentException("Mensaje inexistente");
-                mensaje.setLeido(true);
-            } catch (RuntimeException e) {
-                throw invalido("lecturas.txt", numero, e);
-            }
-        }
     }
 
-    private List<String> lineas(String archivo) throws IOException {
-        Path ruta = directorio.resolve(archivo);
-        if (!Files.exists(ruta)) {
-            Files.writeString(ruta, archivo.equals("mensajes.txt") ? "# Conecta2 - mensajes en texto\n" : "",
-                    StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
-        }
-        return Files.readAllLines(ruta, StandardCharsets.UTF_8);
-    }
-
-    private IOException invalido(String archivo, int linea, Exception causa) {
-        return new IOException(archivo + ": línea " + linea + " inválida: " + causa.getMessage(), causa);
-    }
-
-    private void agregar(String archivo, String texto) throws IOException {
-        Files.writeString(directorio.resolve(archivo), texto, StandardCharsets.UTF_8,
+    private void agregar(String texto) throws IOException {
+        Files.writeString(archivo, texto + "\n", StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    }
+
+    private void guardarTodo() throws IOException {
+        ArrayList<String> lineas = new ArrayList<>();
+        for (String usuario : usuarios) lineas.add("USUARIO\t" + usuario);
+        for (Mensaje mensaje : mensajes) lineas.add("MENSAJE\t" + mensaje.aArchivo());
+        Files.write(archivo, lineas, StandardCharsets.UTF_8);
     }
 
     public boolean existe(String nombre) {
@@ -95,7 +79,7 @@ public class ArchivoDatos {
     public String registrar(String alias) throws IOException {
         String nombre = normalizarUsuario(alias);
         if (!existe(nombre)) {
-            agregar("usuarios.txt", nombre + "\n");
+            agregar("USUARIO\t" + nombre);
             usuarios.add(nombre);
         }
         return nombre;
@@ -121,7 +105,7 @@ public class ArchivoDatos {
             throw new IllegalArgumentException("Selecciona otro usuario registrado.");
         }
         Mensaje mensaje = new Mensaje(siguienteId, System.currentTimeMillis(), emisor, destinatario, texto);
-        agregar("mensajes.txt", mensaje.aArchivo() + "\n");
+        agregar("MENSAJE\t" + mensaje.aArchivo());
         siguienteId++;
         mensajes.add(mensaje);
         return mensaje;
@@ -140,8 +124,13 @@ public class ArchivoDatos {
             throw new IllegalArgumentException("Solo puedes leer los mensajes que recibiste.");
         }
         if (!mensaje.isLeido()) {
-            agregar("lecturas.txt", id + "\n");
             mensaje.setLeido(true);
+            try {
+                guardarTodo();
+            } catch (IOException e) {
+                mensaje.setLeido(false);
+                throw e;
+            }
         }
         return mensaje;
     }
